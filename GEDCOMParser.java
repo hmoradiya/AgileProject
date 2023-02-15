@@ -3,6 +3,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.time.LocalDate;
 import java.time.Period;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 
@@ -13,7 +14,12 @@ public class GEDCOMParser {
 
         Map<String, Individual> individualsMap = new TreeMap<>();
         Map<String, Family> familiesMap = new TreeMap<>();
+        Map<String, ArrayList<String>> fileComments = new HashMap<>(){{
+            put("HEAD", new ArrayList<>());
+            put("TRLR", new ArrayList<>());
+        }};
 
+        List<String> commentSet = new ArrayList<>();
         try (BufferedReader br = new BufferedReader(new FileReader(fileName))) {
             String line;
             Individual currentIndividual = null;
@@ -25,20 +31,30 @@ public class GEDCOMParser {
                 if (preTokenflag) {
                     preTokens = tokens;
                     preTokenflag = false;
-                } else preTokenflag = true;
-
-                if (tokens[0].equals("0")) {
+                }
+                if (tokens[0].equals("0") && (!((tokens[1].equals("HEAD")||tokens[1].equals("TRLR")||tokens[1].equals("NOTE"))))) {
                     if (tokens.length >= 3 && tokens[2].equals("INDI")) {
                         currentIndividual = new Individual(tokens[1]);
+//                        if(preTokens[1].equals("NOTE")){
+//                            commentSet.add(String.join(" ", Arrays.copyOfRange(preTokens, 1, tokens.length+1)));
+//                            System.out.println(String.join(" ", Arrays.copyOfRange(preTokens, 1, tokens.length)));
+//                            currentIndividual.setComments(commentSet);
+//                            commentSet.clear();
+//                        }
                         individualsMap.put(tokens[1], currentIndividual);
                     } else if (tokens.length >= 3 && tokens[2].equals("FAM")) {
                         currentFamily = new Family(tokens[1]);
+//                        if(preTokens[1].equals("NOTE")){
+//                            commentSet.add(String.join(" ", Arrays.copyOfRange(preTokens, 1, tokens.length+1)));
+//                            currentFamily.setComments(commentSet);
+//                            commentSet.clear();
+//                        }
                         familiesMap.put(tokens[1], currentFamily);
                     }
-                } else if (tokens[0].equals("1")) {
+                } else if (tokens[0].equals("1") || tokens[0].equals("2") || tokens[0].equals("0")) {
                     switch (tokens[1]) {
                         case "NAME":
-                            if (currentIndividual != null) currentIndividual.setName(tokens[2]);
+                            if (currentIndividual != null) currentIndividual.setName(String.join(" ",Arrays.copyOfRange(tokens, 2, tokens.length)));
                             break;
 
                         case "HUSB":
@@ -54,14 +70,17 @@ public class GEDCOMParser {
                             break;
 
                         case "DATE":
-                            String dateStr = tokens[2] +" "+ tokens[3] +" "+ tokens[4];
-                            if (preTokens[1].equals("BIRT")) currentIndividual.setBirthday(LocalDate.parse(dateStr));
+                            String dateStr = tokens[2] +" "+ tokens[3].charAt(0)+tokens[3].substring(1).toLowerCase() +" "+ tokens[4];
 
-                            if (preTokens[1].equals("DEAT")) currentIndividual.setDeath(LocalDate.parse(dateStr));
+                            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd MMM yyyy");
 
-                            if (preTokens[1].equals("DIV")) currentFamily.setDivorced(LocalDate.parse(dateStr));
+                            if (preTokens[1].equals("BIRT")) currentIndividual.setBirthday(LocalDate.parse(dateStr,formatter));
 
-                            if (preTokens[1].equals("MARR")) currentFamily.setMarried(LocalDate.parse(dateStr));
+                            if (preTokens[1].equals("DEAT")) currentIndividual.setDeath(LocalDate.parse(dateStr,formatter));
+
+                            if (preTokens[1].equals("DIV")) currentFamily.setDivorced(LocalDate.parse(dateStr,formatter));
+
+                            if (preTokens[1].equals("MARR")) currentFamily.setMarried(LocalDate.parse(dateStr,formatter));
                             break;
 
                         case "SEX":
@@ -81,10 +100,35 @@ public class GEDCOMParser {
                             currentIndividual.setSpouse(tokens[2]);
                             break;
 
-                        default:
-                            System.out.println("Something went wrong!");
+                        case "HEAD":
+//                            if(preTokens[1].equals("NOTE")){
+//                                String strCmnt = String.join(" ", Arrays.copyOfRange(preTokens, 1, tokens.length+1));
+//                                commentSet.add(strCmnt);
+//                                for(String cmnt: commentSet){
+//                                    fileComments.get("HEAD").add(cmnt);
+//                                }
+//                                commentSet.clear();
+//                            }
+                            break;
+
+                        case "TRLR":
+//                            if(preTokens[1].equals("NOTE")){
+//                                commentSet.add(String.join(" ", Arrays.copyOfRange(preTokens, 1, tokens.length+1)));
+//                                for(String cmnt: commentSet){
+//                                    fileComments.get("TRLR").add(cmnt);
+//                                }
+//                                commentSet.clear();
+//                            }
+                            break;
+
+                        case "NOTE":
+//                            commentSet.add(String.join(" ", Arrays.copyOfRange(preTokens, 1, tokens.length+1)));
+                            break;
+
                     }
                 }
+                preTokens = tokens;
+
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -93,15 +137,41 @@ public class GEDCOMParser {
         System.out.println("Individuals:");
         for (String iid : individualsMap.keySet()) {
             Individual indiv = individualsMap.get(iid);
-            System.out.printf("ID = {%s}, Name = {%s}, Gender = {%s}, Birthday = {%s}, Age = {%d}, Alive = {%b}, Death = {%s}, Child = {%s}, Spouse = {%s}",
+            System.out.printf("ID = {%s}, Name = {%s}, Gender = {%s}, Birthday = {%s}, Age = {%d}, Alive = {%b}, Death = {%s}, Child = {%s}, Spouse = {%s}\n",
                     iid, indiv.getName(), indiv.getGender(), indiv.getBirthday().toString(), indiv.getAge(), indiv.isAlive(), indiv.getDeathDate().toString(), indiv.getChild(), indiv.getSpouse());
         }
 
+        System.out.println("Family:");
         for (String fid : familiesMap.keySet()) {
             Family fam = familiesMap.get(fid);
-            System.out.printf("ID = {%s}, Married = {%s}, Divorced = {%s}, Husband ID = {%s}, Husband Name = {%s}, Wife ID = {%s}, Wife Name = {%s}, Childern = {%s}",
+            System.out.printf("ID = {%s}, Married = {%s}, Divorced = {%s}, Husband ID = {%s}, Husband Name = {%s}, Wife ID = {%s}, Wife Name = {%s}, Childern = {%s}\n",
                     fid, fam.getMarried().toString(), fam.getDivorced().toString(), fam.getHusband().getId(), fam.getHusband().getName(),fam.getWife().getId(), fam.getWife().getName(), fam.getChildern().toString());
         }
+
+//        System.out.println("Head comments:");
+//        for (String cmnt : fileComments.get("HEAD")) {
+//            System.out.println(cmnt);
+//        }
+//        System.out.println("TRLR comments:");
+//        for (String cmnt : fileComments.get("HEAD")) {
+//            System.out.println(cmnt);
+//        }
+//        System.out.println("Individual comments:");
+//        for (String iid : individualsMap.keySet()) {
+//            Individual indiv = individualsMap.get(iid);
+//            System.out.println(iid + ":");
+//            for(String cmnt: indiv.getComments()){
+//                System.out.println(cmnt);
+//            }
+//        }
+//        System.out.println("Family comments:");
+//        for (String fid : familiesMap.keySet()) {
+//            Family fam = familiesMap.get(fid);
+//            System.out.println(fid + ":");
+//            for(String cmnt: fam.getComments()){
+//                System.out.println(cmnt);
+//            }
+//        }
     }
 }
 
@@ -115,6 +185,7 @@ class Individual {
     private LocalDate death = null;
     private String isSpouse = "NA";
     private String isChild = "NA";
+    private List<String> comments = new ArrayList<>();
     public Individual(String id) {
         this.id = id;
     }
@@ -137,13 +208,12 @@ class Individual {
     public void setGender(String gender){
         this.gender = gender;
     }
-    public Object getBirthday(){
-        if(birthday != null)
-            return birthday;
-        else return "NA";
+    public LocalDate getBirthday(){
+        return birthday;
     }
     public void setBirthday(LocalDate dob){
         this.birthday = dob;
+
     }
     private int calcAge(LocalDate dob){
         LocalDate birthDate = LocalDate.parse(dob.toString());
@@ -185,6 +255,15 @@ class Individual {
     public void setChild(String child){
         this.isChild = child;
     }
+
+    public List<String> getComments(){
+        return comments;
+    }
+    public void setComments(List<String> comments){
+        for(String cmnt : comments){
+            comments.add(cmnt);
+        }
+    }
 }
 
 class Family {
@@ -194,6 +273,7 @@ class Family {
     private Individual husband = null;
     private Individual wife;
     private List<String> childrenId = new ArrayList<>();
+    private List<String> comments = new ArrayList<>();
 
     public Family(String id) {
         this.id = id;
@@ -220,7 +300,7 @@ class Family {
     }
 
     public void addChildern(String ChildId) {
-        childrenId.add(id);
+        childrenId.add(ChildId);
     }
 
     public List getChildern(){
@@ -243,5 +323,14 @@ class Family {
     }
     public void setDivorced(LocalDate divorced){
         this.divorced = divorced;
+    }
+
+    public List<String> getComments(){
+        return comments;
+    }
+    public void setComments(List<String> comments){
+        for(String cmnt : comments){
+            comments.add(cmnt);
+        }
     }
 }
