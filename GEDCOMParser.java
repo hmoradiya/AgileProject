@@ -10,7 +10,7 @@ import java.util.*;
 public class GEDCOMParser {
 
     public static void main(String[] args) {
-        String fileName = "/Users/jaydeepdobariya/Desktop/Spring Sem/CS 555 - Agile Methodologies/gedcom.ged"; // replace with actual file name
+        String fileName = "/Users/jaydeepdobariya/Desktop/Spring Sem/CS 555 - Agile Methodologies/family.ged"; // replace with actual file name
 
         Map<String, Individual> individualsMap = new TreeMap<>();
         Map<String, Family> familiesMap = new TreeMap<>();
@@ -70,9 +70,9 @@ public class GEDCOMParser {
                             break;
 
                         case "DATE":
-                            String dateStr = tokens[2] +" "+ tokens[3].charAt(0)+tokens[3].substring(1).toLowerCase() +" "+ tokens[4];
+                            String dateStr = tokens[2] + " "+ tokens[3].charAt(0)+tokens[3].substring(1).toLowerCase() +" "+ tokens[4];
 
-                            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd MMM yyyy");
+                            DateTimeFormatter formatter = DateTimeFormatter.ofPattern( tokens[2].length() < 2 ? "d MMM yyyy": "dd MMM yyyy");
 
                             if (preTokens[1].equals("BIRT")) currentIndividual.setBirthday(LocalDate.parse(dateStr,formatter));
 
