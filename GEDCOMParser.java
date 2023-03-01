@@ -1,25 +1,110 @@
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
+import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.time.Period;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
-
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class GEDCOMParser {
+
+    public static String checkCorrEntries(Map<String, Individual> indis, Map<String, Family> fams){
+        String err = "";
+        String isChild;
+        String isSpouse;
+        String indiName;
+        for (String iid : indis.keySet()) {
+            Individual indiv = indis.get(iid);
+            isChild = indiv.isChild();
+            isSpouse = indiv.isSpouse();
+            indiName = indiv.getName().replace("/", "");
+            if(isChild.equals("NA") && isSpouse.equals("NA")){
+                err += String.format("\n%s (%s) doesn't belong to any family!",indiName, iid);
+            }
+            if(!isChild.equals("NA")){
+                Family cfam = fams.get(isChild);
+                if(cfam == null){
+                    err += String.format("\n%s (%s) is a child in a family (%s) which doesn't exist in the database!",indiName,iid,isChild);
+                }else{
+                    if(!cfam.getChildern().contains(iid.toString())){
+                        err += String.format("\n%s (%s) doesn't belong in family (%s) as a child!",indiName,iid,isChild);
+                    }
+                }
+            }
+            if(!isSpouse.equals("NA")){
+                Family sfam = fams.get(isSpouse);
+                if(sfam == null){
+                    err += String.format("\n%s (%s) is a spouse in a family (%s) which doesn't exist in the database!",indiName,iid,isSpouse);
+                }else {
+                    if (!(sfam.getHusbandID().equals(iid) || sfam.getWifeID().equals(iid))) {
+                        err += String.format("\n%s (%s) doesn't belong in family (%s) as a spouse!", indiName, iid, isSpouse);
+                    }
+                }
+            }
+        }
+
+        String husbandID;
+        String wifeID;
+        List<String> childern;
+        for(String fid : fams.keySet()){
+            Family fam = fams.get(fid);
+            husbandID = fam.getHusbandID();
+            wifeID = fam.getWifeID();
+            childern = fam.getChildern();
+
+            if(indis.get(husbandID) == null){
+                err += String.format("\nHusband (%s) in family (%s) does not exist in the database!", husbandID, fid);
+            }
+            if(indis.get(wifeID) == null){
+                err += String.format("\nWife (%s) in family (%s) does not exist in the database!", wifeID, fid);
+            }
+
+            for(String cid : childern){
+                if(indis.get(cid) == null){
+                    err += String.format("\nChild (%s) in family (%s) does not exist in the database!", cid, fid);
+                }
+            }
+        }
+
+        return err;
+    }
+    private static boolean isValidDate(String day, String month, String year){
+        Pattern dpattern = Pattern.compile("^\\d{1,2}$");
+        Pattern ypattern = Pattern.compile("^\\d{4,4}$");
+        Pattern mpattern = Pattern.compile("^[a-zA-Z]{3,3}$");
+        HashMap<String, Integer> months = new HashMap<>() {{put("JAN", 31);put("FEB", 28);put("MAR", 31);
+            put("APR", 30);put("MAY", 31);put("JUN", 30);put("JUL", 31);put("AUG", 31);put("SEPT", 30);
+            put("OCT", 31);put("NOV", 30);put("DEC", 31);
+        }};
+
+        if(!dpattern.matcher(day).matches()) return false;
+        if(!ypattern.matcher(year).matches()) return false;
+        if(!mpattern.matcher(month).matches()) return false;
+
+        if(months.get(month.toUpperCase()) != null){
+            if(!(Integer.parseInt(day)>0 && Integer.parseInt(day) <= months.get(month.toUpperCase()))){
+                return false;
+            }
+        }else{
+            return false;
+        }
+
+        if(Integer.parseInt(year) < 1){
+            return false;
+        }
+
+        return true;
+    }
 
     public static void main(String[] args) {
         String fileName = "/Users/jaydeepdobariya/Desktop/Spring Sem/CS 555 - Agile Methodologies/family.ged"; // replace with actual file name
 
         Map<String, Individual> individualsMap = new TreeMap<>();
         Map<String, Family> familiesMap = new TreeMap<>();
-        Map<String, ArrayList<String>> fileComments = new HashMap<>(){{
-            put("HEAD", new ArrayList<>());
-            put("TRLR", new ArrayList<>());
-        }};
 
-        List<String> commentSet = new ArrayList<>();
         try (BufferedReader br = new BufferedReader(new FileReader(fileName))) {
             String line;
             Individual currentIndividual = null;
@@ -32,23 +117,12 @@ public class GEDCOMParser {
                     preTokens = tokens;
                     preTokenflag = false;
                 }
-                if (tokens[0].equals("0") && (!((tokens[1].equals("HEAD")||tokens[1].equals("TRLR")||tokens[1].equals("NOTE"))))) {
+                if (tokens[0].equals("0")) {
                     if (tokens.length >= 3 && tokens[2].equals("INDI")) {
                         currentIndividual = new Individual(tokens[1]);
-//                        if(preTokens[1].equals("NOTE")){
-//                            commentSet.add(String.join(" ", Arrays.copyOfRange(preTokens, 1, tokens.length+1)));
-//                            System.out.println(String.join(" ", Arrays.copyOfRange(preTokens, 1, tokens.length)));
-//                            currentIndividual.setComments(commentSet);
-//                            commentSet.clear();
-//                        }
                         individualsMap.put(tokens[1], currentIndividual);
                     } else if (tokens.length >= 3 && tokens[2].equals("FAM")) {
                         currentFamily = new Family(tokens[1]);
-//                        if(preTokens[1].equals("NOTE")){
-//                            commentSet.add(String.join(" ", Arrays.copyOfRange(preTokens, 1, tokens.length+1)));
-//                            currentFamily.setComments(commentSet);
-//                            commentSet.clear();
-//                        }
                         familiesMap.put(tokens[1], currentFamily);
                     }
                 } else if (tokens[0].equals("1") || tokens[0].equals("2") || tokens[0].equals("0")) {
@@ -58,11 +132,11 @@ public class GEDCOMParser {
                             break;
 
                         case "HUSB":
-                            if (currentFamily != null) currentFamily.setHusband(individualsMap.get(tokens[2]));
+                            if (currentFamily != null) currentFamily.setHusbandID(tokens[2]);
                             break;
 
                         case "WIFE":
-                            if (currentFamily != null) currentFamily.setWife(individualsMap.get(tokens[2]));
+                            if (currentFamily != null) currentFamily.setWifeID(tokens[2]);
                             break;
 
                         case "CHIL":
@@ -70,17 +144,39 @@ public class GEDCOMParser {
                             break;
 
                         case "DATE":
-                            String dateStr = tokens[2] + " "+ tokens[3].charAt(0)+tokens[3].substring(1).toLowerCase() +" "+ tokens[4];
-
+                            String dateType = "";
+                            String day = tokens[2];
+                            String month = tokens[3].toUpperCase().charAt(0)+tokens[3].substring(1).toLowerCase();
+                            String year = tokens[4];
+                            String dateStr = day + " "+ month +" "+ year;
+                            if(!isValidDate(day, month, year)){
+                                throw new Exception(String.format("Error: Entered invalid date (%s) for %s (%s)", dateStr,currentIndividual.getName().replace("/", ""),currentIndividual.getId()));
+                            }
                             DateTimeFormatter formatter = DateTimeFormatter.ofPattern( tokens[2].length() < 2 ? "d MMM yyyy": "dd MMM yyyy");
+                            LocalDate currDate = LocalDate.now();
+                            LocalDate inputdate = LocalDate.parse(dateStr,formatter);
+                            if (preTokens[1].equals("BIRT")){
+                                currentIndividual.setBirthday(inputdate);
+                                dateType = "Birth";
+                            }
 
-                            if (preTokens[1].equals("BIRT")) currentIndividual.setBirthday(LocalDate.parse(dateStr,formatter));
+                            if (preTokens[1].equals("DEAT")){
+                                currentIndividual.setDeath(inputdate);
+                                dateType = "Death";
+                            }
 
-                            if (preTokens[1].equals("DEAT")) currentIndividual.setDeath(LocalDate.parse(dateStr,formatter));
+                            if (preTokens[1].equals("DIV")){
+                                currentFamily.setDivorced(inputdate);
+                                dateType = "Divorced";
+                            }
 
-                            if (preTokens[1].equals("DIV")) currentFamily.setDivorced(LocalDate.parse(dateStr,formatter));
-
-                            if (preTokens[1].equals("MARR")) currentFamily.setMarried(LocalDate.parse(dateStr,formatter));
+                            if (preTokens[1].equals("MARR")) {
+                                currentFamily.setMarried(inputdate);
+                                dateType = "Married";
+                            }
+                            if(!inputdate.isBefore(currDate)){
+                                throw new Exception(String.format("Error US01 : %s date (%s) of %s (%s) must be before today's date!", dateType,dateStr,currentIndividual.getName().replace("/", ""),currentIndividual.getId()));
+                            }
                             break;
 
                         case "SEX":
@@ -100,77 +196,35 @@ public class GEDCOMParser {
                             currentIndividual.setSpouse(tokens[2]);
                             break;
 
-                        case "HEAD":
-//                            if(preTokens[1].equals("NOTE")){
-//                                String strCmnt = String.join(" ", Arrays.copyOfRange(preTokens, 1, tokens.length+1));
-//                                commentSet.add(strCmnt);
-//                                for(String cmnt: commentSet){
-//                                    fileComments.get("HEAD").add(cmnt);
-//                                }
-//                                commentSet.clear();
-//                            }
-                            break;
-
-                        case "TRLR":
-//                            if(preTokens[1].equals("NOTE")){
-//                                commentSet.add(String.join(" ", Arrays.copyOfRange(preTokens, 1, tokens.length+1)));
-//                                for(String cmnt: commentSet){
-//                                    fileComments.get("TRLR").add(cmnt);
-//                                }
-//                                commentSet.clear();
-//                            }
-                            break;
-
-                        case "NOTE":
-//                            commentSet.add(String.join(" ", Arrays.copyOfRange(preTokens, 1, tokens.length+1)));
+                        case "HEAD", "TRLR", "NOTE":
                             break;
 
                     }
                 }
                 preTokens = tokens;
-
+            }
+            if(checkCorrEntries(individualsMap, familiesMap).length() != 0){
+                String errMsg = checkCorrEntries(individualsMap, familiesMap);
+                throw new Exception(String.format("Error US26 : %s",errMsg));
             }
         } catch (IOException e) {
             e.printStackTrace();
+        } catch (Exception e) {
+            System.err.println(e.getMessage());
         }
 
-        System.out.println("Individuals:");
-        for (String iid : individualsMap.keySet()) {
-            Individual indiv = individualsMap.get(iid);
-            System.out.printf("ID = {%s}, Name = {%s}, Gender = {%s}, Birthday = {%s}, Age = {%d}, Alive = {%b}, Death = {%s}, Child = {%s}, Spouse = {%s}\n",
-                    iid, indiv.getName(), indiv.getGender(), indiv.getBirthday().toString(), indiv.getAge(), indiv.isAlive(), indiv.getDeathDate().toString(), indiv.getChild(), indiv.getSpouse());
-        }
-
-        System.out.println("Family:");
-        for (String fid : familiesMap.keySet()) {
-            Family fam = familiesMap.get(fid);
-            System.out.printf("ID = {%s}, Married = {%s}, Divorced = {%s}, Husband ID = {%s}, Husband Name = {%s}, Wife ID = {%s}, Wife Name = {%s}, Childern = {%s}\n",
-                    fid, fam.getMarried().toString(), fam.getDivorced().toString(), fam.getHusband().getId(), fam.getHusband().getName(),fam.getWife().getId(), fam.getWife().getName(), fam.getChildern().toString());
-        }
-
-//        System.out.println("Head comments:");
-//        for (String cmnt : fileComments.get("HEAD")) {
-//            System.out.println(cmnt);
-//        }
-//        System.out.println("TRLR comments:");
-//        for (String cmnt : fileComments.get("HEAD")) {
-//            System.out.println(cmnt);
-//        }
-//        System.out.println("Individual comments:");
+//        System.out.println("Individuals:");
 //        for (String iid : individualsMap.keySet()) {
 //            Individual indiv = individualsMap.get(iid);
-//            System.out.println(iid + ":");
-//            for(String cmnt: indiv.getComments()){
-//                System.out.println(cmnt);
-//            }
+//            System.out.printf("ID = {%s}, Name = {%s}, Gender = {%s}, Birthday = {%s}, Age = {%d}, Alive = {%b}, Death = {%s}, Child = {%s}, Spouse = {%s}\n",
+//                    iid, indiv.getName(), indiv.getGender(), indiv.getBirthday().toString(), indiv.getAge(), indiv.isAlive(), indiv.getDeathDate().toString(), indiv.isChild(), indiv.isSpouse());
 //        }
-//        System.out.println("Family comments:");
+//
+//        System.out.println("Family:");
 //        for (String fid : familiesMap.keySet()) {
 //            Family fam = familiesMap.get(fid);
-//            System.out.println(fid + ":");
-//            for(String cmnt: fam.getComments()){
-//                System.out.println(cmnt);
-//            }
+//            System.out.printf("ID = {%s}, Married = {%s}, Divorced = {%s}, Husband ID = {%s}, Husband Name = {%s}, Wife ID = {%s}, Wife Name = {%s}, Childern = {%s}\n",
+//                    fid, fam.getMarried().toString(), fam.getDivorced().toString(), fam.getHusbandID(), individualsMap.get(fam.getHusbandID()).getName(),fam.getWifeID(), individualsMap.get(fam.getWifeID()).getName(), fam.getChildern().toString());
 //        }
     }
 }
@@ -240,7 +294,7 @@ class Individual {
         this.alive = false;
     }
 
-    public String getSpouse(){
+    public String isSpouse(){
         return isSpouse;
     }
 
@@ -248,7 +302,7 @@ class Individual {
         this.isSpouse = spouse;
     }
 
-    public String getChild(){
+    public String isChild(){
         return isChild;
     }
 
@@ -256,24 +310,15 @@ class Individual {
         this.isChild = child;
     }
 
-    public List<String> getComments(){
-        return comments;
-    }
-    public void setComments(List<String> comments){
-        for(String cmnt : comments){
-            comments.add(cmnt);
-        }
-    }
 }
 
 class Family {
     private String id = "NA";
     private LocalDate married = null;
     private LocalDate divorced = null;
-    private Individual husband = null;
-    private Individual wife;
+    private String husbandID = null;
+    private String wifeID = null;
     private List<String> childrenId = new ArrayList<>();
-    private List<String> comments = new ArrayList<>();
 
     public Family(String id) {
         this.id = id;
@@ -283,20 +328,20 @@ class Family {
         return id;
     }
 
-    public Individual getHusband() {
-        return husband;
+    public String getHusbandID() {
+        return husbandID;
     }
 
-    public void setHusband(Individual husband) {
-        this.husband = husband;
+    public void setHusbandID(String husband) {
+        this.husbandID = husband;
     }
 
-    public Individual getWife() {
-        return wife;
+    public String getWifeID() {
+        return wifeID;
     }
 
-    public void setWife(Individual wife) {
-        this.wife = wife;
+    public void setWifeID(String wife) {
+        this.wifeID = wife;
     }
 
     public void addChildern(String ChildId) {
@@ -325,12 +370,4 @@ class Family {
         this.divorced = divorced;
     }
 
-    public List<String> getComments(){
-        return comments;
-    }
-    public void setComments(List<String> comments){
-        for(String cmnt : comments){
-            comments.add(cmnt);
-        }
-    }
 }
