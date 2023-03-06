@@ -105,6 +105,7 @@ public class GEDCOMParser {
         Map<String, Individual> individualsMap = new TreeMap<>();
         Map<String, Family> familiesMap = new TreeMap<>();
 
+
         try (BufferedReader br = new BufferedReader(new FileReader(fileName))) {
             String line;
             Individual currentIndividual = null;
@@ -119,8 +120,14 @@ public class GEDCOMParser {
                 }
                 if (tokens[0].equals("0")) {
                     if (tokens.length >= 3 && tokens[2].equals("INDI")) {
-                        currentIndividual = new Individual(tokens[1]);
-                        individualsMap.put(tokens[1], currentIndividual);
+                        if(individualsMap.containsKey(tokens[1])){
+                            throw new Exception(String.format("Error: Id (%s) is not unqiue ",tokens[1]));
+
+                        }
+                        else {
+                            currentIndividual = new Individual(tokens[1]);
+                            individualsMap.put(tokens[1], currentIndividual);
+                        }
                     } else if (tokens.length >= 3 && tokens[2].equals("FAM")) {
                         currentFamily = new Family(tokens[1]);
                         familiesMap.put(tokens[1], currentFamily);
@@ -213,19 +220,28 @@ public class GEDCOMParser {
             System.err.println(e.getMessage());
         }
 
-//        System.out.println("Individuals:");
-//        for (String iid : individualsMap.keySet()) {
-//            Individual indiv = individualsMap.get(iid);
-//            System.out.printf("ID = {%s}, Name = {%s}, Gender = {%s}, Birthday = {%s}, Age = {%d}, Alive = {%b}, Death = {%s}, Child = {%s}, Spouse = {%s}\n",
-//                    iid, indiv.getName(), indiv.getGender(), indiv.getBirthday().toString(), indiv.getAge(), indiv.isAlive(), indiv.getDeathDate().toString(), indiv.isChild(), indiv.isSpouse());
-//        }
-//
-//        System.out.println("Family:");
-//        for (String fid : familiesMap.keySet()) {
-//            Family fam = familiesMap.get(fid);
-//            System.out.printf("ID = {%s}, Married = {%s}, Divorced = {%s}, Husband ID = {%s}, Husband Name = {%s}, Wife ID = {%s}, Wife Name = {%s}, Childern = {%s}\n",
-//                    fid, fam.getMarried().toString(), fam.getDivorced().toString(), fam.getHusbandID(), individualsMap.get(fam.getHusbandID()).getName(),fam.getWifeID(), individualsMap.get(fam.getWifeID()).getName(), fam.getChildern().toString());
-//        }
+        System.out.println("Individuals:");
+        for (String iid : individualsMap.keySet()) {
+            Individual indiv = individualsMap.get(iid);
+            System.out.printf("ID = {%s}, Name = {%s}, Gender = {%s}, Birthday = {%s}, Age = {%d}, Alive = {%b}, Death = {%s}, Child = {%s}, Spouse = {%s}\n",
+                    iid, indiv.getName(), indiv.getGender(), indiv.getBirthday().toString(), indiv.getAge(), indiv.isAlive(), indiv.getDeathDate().toString(), indiv.isChild(), indiv.isSpouse());
+        }
+
+        System.out.println("Family:");
+        for (String fid : familiesMap.keySet()) {
+            Family fam = familiesMap.get(fid);
+            System.out.printf("ID = {%s}, Married = {%s}, Divorced = {%s}, Husband ID = {%s}, Husband Name = {%s}, Wife ID = {%s}, Wife Name = {%s}, Childern = {%s}\n",
+                    fid, fam.getMarried().toString(), fam.getDivorced().toString(), fam.getHusbandID(), individualsMap.get(fam.getHusbandID()).getName(),fam.getWifeID(), individualsMap.get(fam.getWifeID()).getName(), fam.getChildern().toString());
+        }
+        System.out.println("Deceased:");
+        for (String iid : individualsMap.keySet()) {
+            Individual indiv = individualsMap.get(iid);
+            if(!indiv.isAlive()) {
+                System.out.printf("ID = {%s}, Name = {%s}, Gender = {%s}, Birthday = {%s}, Age = {%d}, Alive = {%b}, Death = {%s}, Child = {%s}, Spouse = {%s}\n",
+                        iid, indiv.getName(), indiv.getGender(), indiv.getBirthday().toString(), indiv.getAge(), indiv.isAlive(), indiv.getDeathDate().toString(), indiv.isChild(), indiv.isSpouse());
+
+            }
+        }
     }
 }
 
