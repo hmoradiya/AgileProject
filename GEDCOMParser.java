@@ -11,8 +11,7 @@ import java.util.regex.Pattern;
 
 public class GEDCOMParser {
 
-    public static String checkCorrEntries(Map<String, Individual> indis, Map<String, Family> fams){
-        String err = "";
+    public static void checkCorrEntries(Map<String, Individual> indis, Map<String, Family> fams, ArrayList<String> errorList){
         String isChild;
         String isSpouse;
         String indiName;
@@ -22,25 +21,25 @@ public class GEDCOMParser {
             isSpouse = indiv.isSpouse();
             indiName = indiv.getName().replace("/", "");
             if(isChild.equals("NA") && isSpouse.equals("NA")){
-                err += String.format("\n%s (%s) doesn't belong to any family!",indiName, iid);
+                errorList.add(String.format("Error US26: %s (%s) doesn't belong to any family!",indiName, iid));
             }
             if(!isChild.equals("NA")){
                 Family cfam = fams.get(isChild);
                 if(cfam == null){
-                    err += String.format("\n%s (%s) is a child in a family (%s) which doesn't exist in the database!",indiName,iid,isChild);
+                    errorList.add(String.format("Error US26: %s (%s) is a child in a family (%s) which doesn't exist in the database!",indiName,iid,isChild));
                 }else{
                     if(!cfam.getChildern().contains(iid.toString())){
-                        err += String.format("\n%s (%s) doesn't belong in family (%s) as a child!",indiName,iid,isChild);
+                        errorList.add(String.format("Error US26: %s (%s) doesn't belong in family (%s) as a child!",indiName,iid,isChild));
                     }
                 }
             }
             if(!isSpouse.equals("NA")){
                 Family sfam = fams.get(isSpouse);
                 if(sfam == null){
-                    err += String.format("\n%s (%s) is a spouse in a family (%s) which doesn't exist in the database!",indiName,iid,isSpouse);
+                    errorList.add(String.format("Error US26: %s (%s) is a spouse in a family (%s) which doesn't exist in the database!",indiName,iid,isSpouse));
                 }else {
                     if (!(sfam.getHusbandID().equals(iid) || sfam.getWifeID().equals(iid))) {
-                        err += String.format("\n%s (%s) doesn't belong in family (%s) as a spouse!", indiName, iid, isSpouse);
+                        errorList.add(String.format("Error US26: %s (%s) doesn't belong in family (%s) as a spouse!", indiName, iid, isSpouse));
                     }
                 }
             }
@@ -56,20 +55,18 @@ public class GEDCOMParser {
             childern = fam.getChildern();
 
             if(indis.get(husbandID) == null){
-                err += String.format("\nHusband (%s) in family (%s) does not exist in the database!", husbandID, fid);
+                errorList.add(String.format("Error US26: Husband (%s) in family (%s) does not exist in the database!", husbandID, fid));
             }
             if(indis.get(wifeID) == null){
-                err += String.format("\nWife (%s) in family (%s) does not exist in the database!", wifeID, fid);
+                errorList.add(String.format("Error US26: Wife (%s) in family (%s) does not exist in the database!", wifeID, fid));
             }
 
             for(String cid : childern){
                 if(indis.get(cid) == null){
-                    err += String.format("\nChild (%s) in family (%s) does not exist in the database!", cid, fid);
+                    errorList.add(String.format("Error US26: Child (%s) in family (%s) does not exist in the database!", cid, fid));
                 }
             }
         }
-
-        return err;
     }
     private static boolean isValidDate(String day, String month, String year){
         Pattern dpattern = Pattern.compile("^\\d{1,2}$");
@@ -104,7 +101,7 @@ public class GEDCOMParser {
 
         Map<String, Individual> individualsMap = new TreeMap<>();
         Map<String, Family> familiesMap = new TreeMap<>();
-
+        ArrayList<String> errorList = new ArrayList<>();
 
         try (BufferedReader br = new BufferedReader(new FileReader(fileName))) {
             String line;
@@ -121,8 +118,7 @@ public class GEDCOMParser {
                 if (tokens[0].equals("0")) {
                     if (tokens.length >= 3 && tokens[2].equals("INDI")) {
                         if(individualsMap.containsKey(tokens[1])){
-                            throw new Exception(String.format("Error: Id (%s) is not unqiue ",tokens[1]));
-
+                            errorList.add(String.format("Error US22: Id (%s) is not unqiue ",tokens[1]));
                         }
                         else {
                             currentIndividual = new Individual(tokens[1]);
@@ -157,7 +153,7 @@ public class GEDCOMParser {
                             String year = tokens[4];
                             String dateStr = day + " "+ month +" "+ year;
                             if(!isValidDate(day, month, year)){
-                                throw new Exception(String.format("Error: Entered invalid date (%s) for %s (%s)", dateStr,currentIndividual.getName().replace("/", ""),currentIndividual.getId()));
+                                errorList.add(String.format("Error US01: Entered invalid date (%s) for %s (%s)", dateStr,currentIndividual.getName().replace("/", ""),currentIndividual.getId()));
                             }
                             DateTimeFormatter formatter = DateTimeFormatter.ofPattern( tokens[2].length() < 2 ? "d MMM yyyy": "dd MMM yyyy");
                             LocalDate currDate = LocalDate.now();
@@ -182,7 +178,7 @@ public class GEDCOMParser {
                                 dateType = "Married";
                             }
                             if(!inputdate.isBefore(currDate)){
-                                throw new Exception(String.format("Error US01 : %s date (%s) of %s (%s) must be before today's date!", dateType,dateStr,currentIndividual.getName().replace("/", ""),currentIndividual.getId()));
+                                errorList.add(String.format("Error US01 : %s date (%s) of %s (%s) must be before today's date!", dateType,dateStr,currentIndividual.getName().replace("/", ""),currentIndividual.getId()));
                             }
                             break;
 
@@ -210,29 +206,26 @@ public class GEDCOMParser {
                 }
                 preTokens = tokens;
             }
-            if(checkCorrEntries(individualsMap, familiesMap).length() != 0){
-                String errMsg = checkCorrEntries(individualsMap, familiesMap);
-                throw new Exception(String.format("Error US26 : %s",errMsg));
-            }
+            checkCorrEntries(individualsMap, familiesMap, errorList);
         } catch (IOException e) {
             e.printStackTrace();
         } catch (Exception e) {
             System.err.println(e.getMessage());
         }
 
-        System.out.println("Individuals:");
-        for (String iid : individualsMap.keySet()) {
-            Individual indiv = individualsMap.get(iid);
-            System.out.printf("ID = {%s}, Name = {%s}, Gender = {%s}, Birthday = {%s}, Age = {%d}, Alive = {%b}, Death = {%s}, Child = {%s}, Spouse = {%s}\n",
-                    iid, indiv.getName(), indiv.getGender(), indiv.getBirthday().toString(), indiv.getAge(), indiv.isAlive(), indiv.getDeathDate().toString(), indiv.isChild(), indiv.isSpouse());
-        }
-
-        System.out.println("Family:");
-        for (String fid : familiesMap.keySet()) {
-            Family fam = familiesMap.get(fid);
-            System.out.printf("ID = {%s}, Married = {%s}, Divorced = {%s}, Husband ID = {%s}, Husband Name = {%s}, Wife ID = {%s}, Wife Name = {%s}, Childern = {%s}\n",
-                    fid, fam.getMarried().toString(), fam.getDivorced().toString(), fam.getHusbandID(), individualsMap.get(fam.getHusbandID()).getName(),fam.getWifeID(), individualsMap.get(fam.getWifeID()).getName(), fam.getChildern().toString());
-        }
+//        System.out.println("Individuals:");
+//        for (String iid : individualsMap.keySet()) {
+//            Individual indiv = individualsMap.get(iid);
+//            System.out.printf("ID = {%s}, Name = {%s}, Gender = {%s}, Birthday = {%s}, Age = {%d}, Alive = {%b}, Death = {%s}, Child = {%s}, Spouse = {%s}\n",
+//                    iid, indiv.getName(), indiv.getGender(), indiv.getBirthday().toString(), indiv.getAge(), indiv.isAlive(), indiv.getDeathDate().toString(), indiv.isChild(), indiv.isSpouse());
+//        }
+//
+//        System.out.println("Family:");
+//        for (String fid : familiesMap.keySet()) {
+//            Family fam = familiesMap.get(fid);
+//            System.out.printf("ID = {%s}, Married = {%s}, Divorced = {%s}, Husband ID = {%s}, Husband Name = {%s}, Wife ID = {%s}, Wife Name = {%s}, Childern = {%s}\n",
+//                    fid, fam.getMarried().toString(), fam.getDivorced().toString(), fam.getHusbandID(), individualsMap.get(fam.getHusbandID()).getName(),fam.getWifeID(), individualsMap.get(fam.getWifeID()).getName(), fam.getChildern().toString());
+//        }
         System.out.println("Deceased:");
         for (String iid : individualsMap.keySet()) {
             Individual indiv = individualsMap.get(iid);
@@ -241,6 +234,11 @@ public class GEDCOMParser {
                         iid, indiv.getName(), indiv.getGender(), indiv.getBirthday().toString(), indiv.getAge(), indiv.isAlive(), indiv.getDeathDate().toString(), indiv.isChild(), indiv.isSpouse());
 
             }
+        }
+
+        System.out.println("\nErrors and Anomalies:");
+        for(String err: errorList){
+            System.out.println(err);
         }
     }
 }
